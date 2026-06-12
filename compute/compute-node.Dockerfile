@@ -173,6 +173,10 @@ COPY vendor/postgres-${PG_VERSION:?} postgres
 COPY compute/patches/postgres_fdw.patch .
 COPY compute/patches/pg_stat_statements_pg14-16.patch .
 COPY compute/patches/pg_stat_statements_pg17.patch .
+# pgEdge Spock core patches (PG17): required so Spock can build against this
+# Postgres. Vendored from pgEdge/spock@REL4_0_STABLE; apply with fuzz since
+# Neon's fork is a newer minor (17.8) than the patches' base.
+COPY compute/patches/spock-pg17-*.patch /spock-patches/
 RUN cd postgres && \
     # Apply patches to some contrib extensions
     # For example, we need to grant EXECUTE on pg_stat_statements_reset() to {privileged_role_name}.
@@ -187,6 +191,8 @@ RUN cd postgres && \
     ;; \
     "v17") \
     patch -p1 < /pg_stat_statements_pg17.patch; \
+    # pgEdge Spock core patches (defines remoteTransactionStopTimestamp etc.)
+    for sp in /spock-patches/spock-pg17-*.patch; do patch -p1 --fuzz=3 < "$sp"; done; \
     ;; \
     *) \
     # To do not forget to migrate patches to the next major version
