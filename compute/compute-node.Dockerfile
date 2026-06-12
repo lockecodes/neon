@@ -672,6 +672,33 @@ RUN make -j $(getconf _NPROCESSORS_ONLN) USE_PGXS=1 && \
 
 #########################################################################################
 #
+# Layer "spock-build"
+# pgEdge Spock (multi-active logical replication) + Snowflake (collision-free
+# sequences). Requires the pgEdge core patches applied in pg-build above; without
+# them Spock fails to compile (undefined remoteTransactionStopTimestamp).
+#
+#########################################################################################
+FROM build-deps AS spock-src
+ARG SPOCK_VERSION=v5.0.9
+ARG SNOWFLAKE_VERSION=v2.4
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && \
+    git clone --depth 1 --branch ${SPOCK_VERSION} https://github.com/pgEdge/spock.git /ext-src/spock-src && \
+    git clone --depth 1 --branch ${SNOWFLAKE_VERSION} https://github.com/pgEdge/snowflake.git /ext-src/snowflake-src
+
+FROM pg-build AS spock-build
+COPY --from=spock-src /ext-src/ /ext-src/
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libkrb5-dev libssl-dev libjansson-dev libcurl4-openssl-dev && \
+    export PG_CONFIG=/usr/local/pgsql/bin/pg_config && \
+    cd /ext-src/spock-src && \
+    make -j $(getconf _NPROCESSORS_ONLN) USE_PGXS=1 PG_CONFIG=$PG_CONFIG && \
+    make install USE_PGXS=1 PG_CONFIG=$PG_CONFIG && \
+    cd /ext-src/snowflake-src && \
+    make -j $(getconf _NPROCESSORS_ONLN) USE_PGXS=1 PG_CONFIG=$PG_CONFIG && \
+    make install USE_PGXS=1 PG_CONFIG=$PG_CONFIG
+
+#########################################################################################
+#
 # Layer "pgtap-build"
 # compile pgTAP extension
 #
@@ -1694,6 +1721,7 @@ COPY --from=hypopg-build /usr/local/pgsql/ /usr/local/pgsql/
 COPY --from=online_advisor-build /usr/local/pgsql/ /usr/local/pgsql/
 COPY --from=pg_hashids-build /usr/local/pgsql/ /usr/local/pgsql/
 COPY --from=rum-build /usr/local/pgsql/ /usr/local/pgsql/
+COPY --from=spock-build /usr/local/pgsql/ /usr/local/pgsql/
 COPY --from=pgtap-build /usr/local/pgsql/ /usr/local/pgsql/
 COPY --from=ip4r-build /usr/local/pgsql/ /usr/local/pgsql/
 COPY --from=prefix-build /usr/local/pgsql/ /usr/local/pgsql/
